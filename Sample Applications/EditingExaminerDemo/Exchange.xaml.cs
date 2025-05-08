@@ -11,41 +11,39 @@ using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Threading;
 
-namespace StockMarket
+namespace Exchange
 {
-    public partial class StockMarket : INotifyPropertyChanged
+    public partial class Exchange : INotifyPropertyChanged
     {
-        private readonly Clock _clock;
-        private Random _rnd = new Random(42);
-        private TimeSpan _time;
-
-        public StockMarket()
+        public Exchange()
         {
             InitializeComponent();
 
             _clock = new Clock(OnTick);
 
-            Cats = new ObservableCollection<Cat>
+            Participants = new ObservableCollection<Participant>
             {
-                new Cat("Felix", _rnd.Next(0, 10), _rnd.Next(0, 10), _rnd.Next(0, 10)),
-                new Cat("Garfield", _rnd.Next(0, 10), _rnd.Next(0, 10), _rnd.Next(0, 10)),
-                new Cat("Grumpy", _rnd.Next(0, 10), _rnd.Next(0, 10), _rnd.Next(0, 10))
+                new Participant("Gregg", RandomZeroToTen(), RandomZeroToTen(), RandomZeroToTen()),
+                new Participant("Charlie", RandomZeroToTen(), RandomZeroToTen(), RandomZeroToTen()),
+                new Participant("Chuck", RandomZeroToTen(), RandomZeroToTen(), RandomZeroToTen()),
             };
 
-            Orders = new ObservableCollection<Order>();
-            BindingOperations.EnableCollectionSynchronization(Orders, Orders);
+            Sales = new ObservableCollection<Order>();
+            BindingOperations.EnableCollectionSynchronization(Sales, Sales);
 
-            TransactionHistory = new ObservableCollection<string>();
-            BindingOperations.EnableCollectionSynchronization(TransactionHistory, TransactionHistory);
+            Log = new ObservableCollection<string>();
+            BindingOperations.EnableCollectionSynchronization(Log, Log);
 
             this.DataContext = this;
 
             this.Loaded += OnLoad;
+
+            int RandomZeroToTen() => _rnd.Next(0, 10);
         }
 
         private void OnLoad(object sender, RoutedEventArgs e)
         {
-            StartSell();
+            OpenExchange();
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
@@ -60,11 +58,11 @@ namespace StockMarket
             }
         }
 
-        public ObservableCollection<Cat> Cats { get; }
+        public ObservableCollection<Participant> Participants { get; }
 
-        public ObservableCollection<Order> Orders { get; }
+        public ObservableCollection<Order> Sales { get; }
 
-        public ObservableCollection<string> TransactionHistory { get; }
+        public ObservableCollection<string> Log { get; }
 
         private void OnTick()
         {
@@ -74,19 +72,19 @@ namespace StockMarket
 
         private void ButtonStart_Click(object sender, RoutedEventArgs e)
         {
-            StartSell();
+            OpenExchange();
         }
 
-        private async void StartSell()
+        private async void OpenExchange()
         {
             this.ButtonStart.IsEnabled = false;
 
             _clock.Start();
 
             List<Task> tasks = new List<Task>();
-            foreach (var cat in Cats)
+            foreach (var participant in Participants)
             {
-                tasks.Add(Task.Factory.StartNew(CatThread, (cat, new Random(_rnd.Next())), TaskCreationOptions.LongRunning));
+                tasks.Add(Task.Run(() => RunParticipant(participant, _rnd)));
             }
 
             try
@@ -103,58 +101,48 @@ namespace StockMarket
             }
         }
 
-        private void CatThread(object state)
+        private void RunParticipant(Participant participant, Random rnd)
         {
-            (var cat, var rnd) = (ValueTuple<Cat, Random>)state;
-
-            Thread.CurrentThread.Name = $"Cat {cat.Name}";
+            Thread.CurrentThread.Name = $"Cat {participant.Name}";
 
             var perceivedValue = new Dictionary<string, int>();
 
             while (true)
             {
-                // Refresh the cat's perceived value for each item
-                foreach (var item in Cat.Items)
+                foreach (var item in Participant.Items)
                 {
                     perceivedValue[item] = rnd.Next(1, 10);
                 }
 
-                foreach (var item in Cat.Items)
+                foreach (var item in Participant.Items)
                 {
                     var desire = _rnd.Next(0, 4);
 
                     if (desire == 0)
                     {
-                        // The cat does not want this thing anymore
-                        if (cat.Inventory[item] == 0)
+                        if (participant.Inventory[item] == 0)
                         {
-                            // The cat does not own any anyway
                             continue;
                         }
 
-                        // Check that we're not already selling it
-                        var order = FindOrders(item).FirstOrDefault(o => o.Seller == cat && o.Item == item);
+                        var order = FindOrders(item).FirstOrDefault(o => o.Seller == participant && o.Item == item);
 
                         if (order != null)
                         {
-                            // We are already selling it! Never mind then
                             continue;
                         }
 
-                        // Gimme the monnies
-                        Sell(item, cat, perceivedValue[item]);
+                        Sell(item, participant, perceivedValue[item]);
                     }
                     else if (desire == 3)
                     {
-                        // The cat wants more! Is there any for sale, and can we afford it?
                         var orders = FindOrders(item);
 
-                        var bestOrders = orders.Where(o => o.Seller != cat && o.Price <= cat.Balance).OrderBy(o => o.Price);
+                        var bestOrders = orders.Where(o => o.Seller != participant && o.Price <= participant.Balance).OrderBy(o => o.Price);
 
                         foreach (var order in bestOrders)
                         {
-                            // Gimme! Moar! Take my monnies!
-                            if (Buy(order, cat))
+                            if (Buy(order, participant))
                             {
                                 break;
                             }
@@ -168,16 +156,16 @@ namespace StockMarket
 
         private void ClearExpiredOrders()
         {
-            lock (Orders)
+            lock (Sales)
             {
-                var expiredOrders = Orders.Where(o => (Time - o.Timestamp).TotalMinutes > 5).ToList();
+                var expiredOrders = Sales.Where(o => (Time - o.Timestamp).TotalMinutes > 5).ToList();
 
                 foreach (var order in expiredOrders)
                 {
                     lock (order.Seller)
                     {
-                        Orders.Remove(order);
-                        order.Seller.PendingOrders -= 1;
+                        Sales.Remove(order);
+                        order.Seller.OutstandingOrders -= 1;
                     }
                 }
             }
@@ -185,28 +173,28 @@ namespace StockMarket
 
         private IReadOnlyList<Order> FindOrders(string item)
         {
-            lock (Orders)
+            lock (Sales)
             {
-                return Orders.Where(o => o.Item == item).ToList();
+                return Sales.Where(o => o.Item == item).ToList();
             }
         }
 
-        private void Sell(string item, Cat seller, int price)
+        private void Sell(string item, Participant seller, int price)
         {
             lock (seller)
             {
-                if (seller.PendingOrders < 2)
+                if (seller.OutstandingOrders < 2)
                 {
-                    lock (Orders)
+                    lock (Sales)
                     {
-                        Orders.Add(new Order(seller, item, price, Time));
-                        seller.PendingOrders += 1;
+                        Sales.Add(new Order(seller, item, price, Time));
+                        seller.OutstandingOrders += 1;
                     }
                 }
             }
         }
 
-        private bool Buy(Order order, Cat buyer)
+        private bool Buy(Order order, Participant buyer)
         {
             lock (order.Seller)
             {
@@ -216,40 +204,36 @@ namespace StockMarket
                 {
                     _clock.WaitForNextCycle();
 
-                    lock (Orders)
+                    lock (Sales)
                     {
-                        // Is the order still there?
-                        if (!Orders.Contains(order))
+                        if (!Sales.Contains(order))
                         {
                             return false;
                         }
                     }
 
-                    // Check that the order is still valid
                     if (order.Seller.Inventory[order.Item] < 1 || buyer.Balance < order.Price)
                     {
                         return false;
                     }
 
-                    // The actual transaction
                     buyer.Balance -= order.Price;
                     order.Seller.Balance += order.Price;
                     buyer.Inventory[order.Item] += 1;
                     order.Seller.Inventory[order.Item] -= 1;
 
-                    lock (Orders)
+                    lock (Sales)
                     {
-                        Orders.Remove(order);
-                        order.Seller.PendingOrders -= 1;
+                        Sales.Remove(order);
+                        order.Seller.OutstandingOrders -= 1;
                     }
 
-                    // Refresh display and update transaction history
                     buyer.Refresh();
                     order.Seller.Refresh();
 
-                    lock (TransactionHistory)
+                    lock (Log)
                     {
-                        TransactionHistory.Add($"{buyer.Name} bought {order.Item} from {order.Seller.Name} for ${order.Price}");
+                        Log.Add($"{buyer.Name} bought {order.Item} from {order.Seller.Name} for ${order.Price}");
                     }
 
                     return true;
@@ -261,5 +245,9 @@ namespace StockMarket
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
+
+        private readonly Clock _clock;
+        private Random _rnd = new Random();
+        private TimeSpan _time;
     }
 }

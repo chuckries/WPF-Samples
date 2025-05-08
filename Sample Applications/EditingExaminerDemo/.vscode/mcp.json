@@ -1,0 +1,15 @@
+{
+    "servers": {
+        "Debugger": {
+            "type": "stdio",
+            "command": "q:\\src\\mcp-debug-server\\src\\exe-stdio\\bin\\Debug\\net8.0\\mcp-debug-server-stdio.exe",
+            "args": [
+                "--log-level",
+                "trace"
+            ]
+        }
+        // "Debugger": {
+        //     "url": "http://localhost:3000/sse"
+        // }
+    }
+}

@@ -1,19 +1,19 @@
 ﻿using System.Collections.Generic;
 using System.ComponentModel;
 
-namespace StockMarket
+namespace Exchange
 {
-    public class Cat : INotifyPropertyChanged
+    public class Participant : INotifyPropertyChanged
     {
-        public Cat(string name, int tuna, int catnip, int boxes)
+        public Participant(string name, int brick, int lumber, int wool)
         {
             Name = name;
 
             Inventory = new Dictionary<string, int>
             {
-                ["Tuna"] = tuna,
-                ["Catnip"] = catnip,
-                ["Boxes"] = boxes
+                ["Brick"] = brick,
+                ["Lumber"] = lumber,
+                ["Wool"] = wool
             };
 
             Balance = 50;
@@ -25,16 +25,16 @@ namespace StockMarket
         {
             get
             {
-                yield return "Tuna";
-                yield return "Catnip";
-                yield return "Boxes";
+                yield return "Brick";
+                yield return "Lumber";
+                yield return "Wool";
             }
         }
 
         public string Name { get; }
         public Dictionary<string, int> Inventory { get; }
         public int Balance { get; set; }
-        public int PendingOrders { get; set; }
+        public int OutstandingOrders { get; set; }
 
         public void Refresh()
         {

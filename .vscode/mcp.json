@@ -1,8 +1,8 @@
 {
     "servers": {
-        "MCP": {
-            "type": "sse",
-            "url": "http://localhost:3000"
-        }
+        // "MCP": {
+        //     "type": "sse",
+        //     "url": "http://localhost:3000"
+        // }
     }
 }

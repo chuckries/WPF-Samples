@@ -2,7 +2,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace StockMarket
+namespace Exchange
 {
     public class Clock
     {
